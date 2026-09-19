@@ -1,0 +1,11 @@
+# Temporary override for initial Let's Encrypt certificate issuance.
+# Used automatically by infra/scripts/init-letsencrypt.sh
+
+services:
+  nginx:
+    volumes:
+      - ./infra/nginx/nginx.bootstrap.conf:/etc/nginx/nginx.conf:ro
+      - certbot_www:/var/www/certbot:ro
+
+volumes:
+  certbot_www:

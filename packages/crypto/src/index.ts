@@ -29,3 +29,12 @@ export {
   unwrapKey,
   wrapKey,
 } from "./aes.js";
+export { decryptJson, encryptJson } from "./json.js";
+export { validateEncryptedPayload } from "./validate.js";
+export {
+  runEncryptDecryptFlow,
+  runStringEncryptDecryptExample,
+  runVaultKeyWrapExample,
+  type EncryptDecryptFlowResult,
+  type ExampleSecret,
+} from "./example.js";

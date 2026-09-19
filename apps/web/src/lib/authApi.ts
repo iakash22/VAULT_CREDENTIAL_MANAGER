@@ -33,3 +33,10 @@ export function loginAccount(username: string, authVerifier: string): Promise<Au
 export function fetchMe(token: string): Promise<AuthUser> {
   return request<AuthUser>(API_PATHS.authMe, { token });
 }
+
+export function refreshSession(token: string): Promise<AuthSessionResponse> {
+  return request<AuthSessionResponse>(API_PATHS.authRefresh, {
+    method: "POST",
+    token,
+  });
+}

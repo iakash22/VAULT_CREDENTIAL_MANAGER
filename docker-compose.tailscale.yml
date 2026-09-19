@@ -1,0 +1,16 @@
+# Optional helper — keeps Postgres off the public internet when combined with prod overrides.
+# Tailscale itself should run on the HOST (recommended), not inside this stack.
+#
+# Host setup (Linux):
+#   curl -fsSL https://tailscale.com/install.sh | sh
+#   sudo tailscale up --ssh
+#   sudo ufw deny 5432
+#   sudo ufw allow in on tailscale0 to any port 443 proto tcp
+#   sudo ufw deny 443
+#
+# Access Vault at https://100.x.x.x or https://vault.<tailnet>.ts.net (MagicDNS).
+# Use self-signed dev certs or issue LE certs via DNS challenge if the host has no public HTTP.
+
+services:
+  postgres:
+    ports: []

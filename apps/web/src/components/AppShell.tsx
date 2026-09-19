@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { BottomNav } from "./BottomNav";
-import type { Tab } from "./types";
+import type { Tab } from "../navigation/types";
 
 interface AppShellProps {
   active: Tab;
@@ -11,6 +11,7 @@ interface AppShellProps {
 }
 
 const desktopNav: Array<{ id: Tab; label: string }> = [
+  { id: "home", label: "Home" },
   { id: "vault", label: "Vault" },
   { id: "collections", label: "Collections" },
   { id: "settings", label: "Settings" },

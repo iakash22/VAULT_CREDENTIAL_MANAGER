@@ -13,7 +13,7 @@ describe("API v1 health", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.status).toBe("ok");
-    expect(body.phase).toBe(2);
+    expect(body.phase).toBe(10);
     expect(body.service).toBe("vault-api");
   });
 

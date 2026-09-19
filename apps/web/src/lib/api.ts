@@ -24,6 +24,11 @@ export async function request<T>(
   }
 
   const response = await fetch(`${env.VITE_API_BASE_URL}${path}`, { ...init, headers });
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
   const payload = (await response.json().catch(() => ({ error: "Request failed" }))) as
     | T
     | ApiErrorResponse;

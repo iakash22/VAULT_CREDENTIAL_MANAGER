@@ -46,17 +46,27 @@ admin could open the vault. The JWT only proves identity. It cannot decrypt.
 
 **HKDF** is the split. Same password, two unrelated keys.
 
-**AES-256-GCM** is the cipher for later secret blobs.
+**AES-256-GCM** encrypts the wrapped vault key and future secret blobs. See
+[ENCRYPTION.md](./ENCRYPTION.md) for IV, auth tag, and payload format.
 
 **Short JWT (15 minutes)** limits a stolen session token. The token is not a
 key. Locking the tab drops both the JWT and the encryption key from memory.
 
 **Lockout + rate limits** slow online guessing. They do not replace Argon2id.
 
-## What the database stores (Phase 2)
+## What the database stores
 
-`users`: username, server auth hash, server salt, client KDF parameters,
+**`users`**: username, server auth hash, server salt, client KDF parameters,
 failed-login counters. No encryption keys. No master passwords.
+
+**`user_vault_keys` (Phase 3)**: one `EncryptedPayload` JSONB per user — the
+vault key wrapped with the master-derived encryption key. The server validates
+shape only; it cannot unwrap or read the vault key.
+
+**`secrets` (Phase 6–7)**: `encrypted_payload` JSONB holds all sensitive fields.
+`title`, `tags`, and `secret_type` are stored in plaintext so the server can
+index and search without decryption. This is an intentional trade-off: an attacker
+with the database learns what you named a secret, not the password/token inside it.
 
 ## Known JavaScript limitation
 

@@ -5,13 +5,17 @@ export interface Session {
   token: string;
   expiresAt: number;
   user: AuthUser;
-  /** Held only in RAM. Never written to localStorage or sent back to the API. */
+  /** Master-derived key used only to wrap/unwrap the vault key. RAM only. */
   encryptionKey: Uint8Array;
+  /** Random vault key used to encrypt secrets. RAM only. */
+  vaultKey: Uint8Array;
 }
 
 export interface AuthContextValue {
   session: Session | null;
   setSession: (session: Session) => void;
+  /** Update JWT after a silent refresh without dropping keys. */
+  refreshSession: (token: string, expiresInSec: number) => void;
   lock: () => void;
 }
 

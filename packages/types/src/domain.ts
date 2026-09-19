@@ -29,6 +29,6 @@ export interface SecretDraft {
   uri?: string;
 }
 
-export const PHASE = 2;
+export const PHASE = 10;
 export const APP_NAME = "Vault";
 export const APP_VERSION = "0.1.0";

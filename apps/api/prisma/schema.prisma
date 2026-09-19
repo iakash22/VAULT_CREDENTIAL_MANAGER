@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username       String    @unique
+  authHash       String    @map("auth_hash")
+  authSalt       String    @map("auth_salt")
+  kdfAlgorithm   String    @map("kdf_algorithm")
+  kdfSalt        String    @map("kdf_salt")
+  kdfMemoryKib   Int       @map("kdf_memory_kib")
+  kdfIterations  Int       @map("kdf_iterations")
+  kdfParallelism Int       @map("kdf_parallelism")
+  kdfHashLength  Int       @map("kdf_hash_length")
+  failedLogins   Int       @default(0) @map("failed_logins")
+  lockedUntil    DateTime? @map("locked_until") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  vaultKey   UserVaultKey?
+  workspaces Workspace[]
+  collections Collection[]
+  secrets    Secret[]
+
+  @@map("users")
+}
+
+model UserVaultKey {
+  userId     String   @id @map("user_id") @db.Uuid
+  wrappedKey Json     @map("wrapped_key")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_vault_keys")
+}
+
+model Workspace {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collections Collection[]
+  secrets     Secret[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("workspaces")
+}
+
+model Collection {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  parentId    String?  @map("parent_id") @db.Uuid
+  name        String
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Collection?  @relation("CollectionTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Collection[] @relation("CollectionTree")
+  secrets   Secret[]
+
+  @@index([workspaceId])
+  @@index([parentId])
+  @@index([userId, workspaceId])
+  @@map("collections")
+}
+
+enum SecretType {
+  password
+  ssh
+  token
+  env
+}
+
+model Secret {
+  id               String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId      String     @map("workspace_id") @db.Uuid
+  collectionId     String?    @map("collection_id") @db.Uuid
+  userId           String     @map("user_id") @db.Uuid
+  secretType       SecretType @map("secret_type")
+  title            String
+  tags             String[]   @default([])
+  encryptedPayload Json       @map("encrypted_payload")
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  collection Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([collectionId])
+  @@index([userId, workspaceId])
+  @@index([userId, secretType])
+  @@index([title])
+  @@map("secrets")
+}

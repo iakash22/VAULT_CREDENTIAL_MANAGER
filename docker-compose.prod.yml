@@ -1,0 +1,35 @@
+# Production overrides — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile production up -d --build
+#
+# First-time TLS: run infra/scripts/init-letsencrypt.sh (see docs/DEPLOYMENT.md)
+
+services:
+  postgres:
+    ports: []
+
+  api:
+    environment:
+      NODE_ENV: production
+      CORS_ORIGIN: https://${VAULT_DOMAIN}
+
+  nginx:
+    environment:
+      VAULT_DOMAIN: ${VAULT_DOMAIN}
+    volumes:
+      - ./infra/nginx/nginx.active.conf:/etc/nginx/nginx.conf:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+
+  certbot:
+    profiles: ["production"]
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: /bin/sh
+    command: -c "trap exit TERM; while :; do certbot renew --quiet --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;"
+
+volumes:
+  certbot_conf:
+  certbot_www:

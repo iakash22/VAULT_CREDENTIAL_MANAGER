@@ -1,11 +1,4 @@
-import {
-  decryptString,
-  deriveKeyFromPassword,
-  encryptString,
-  generateVaultKey,
-  unwrapKey,
-  wrapKey,
-} from "@vault/crypto";
+import { deriveMasterKeySet, runEncryptDecryptFlow } from "@vault/crypto";
 
 export interface SelfTestResult {
   ok: boolean;
@@ -20,21 +13,20 @@ export interface SelfTestResult {
 export async function runCryptoSelfTest(): Promise<SelfTestResult> {
   const started = performance.now();
   try {
-    const derived = await deriveKeyFromPassword("phase-1-self-test-password");
-    const vaultKey = generateVaultKey();
-    const wrapped = await wrapKey(vaultKey, derived.key);
-    const unwrapped = await unwrapKey(wrapped, derived.key);
-    const payload = await encryptString("hello from vault", unwrapped, "self-test");
-    const plaintext = await decryptString(payload, unwrapped);
-
-    if (plaintext !== "hello from vault") {
+    const password = "phase-3-self-test-password-long";
+    const flow = await runEncryptDecryptFlow(password);
+    const keys = await deriveMasterKeySet(password);
+    if (keys.kdf.algorithm !== "argon2id") {
+      throw new Error("Expected Argon2id KDF");
+    }
+    if (flow.decryptedSecret.title !== "Example login") {
       throw new Error("Plaintext mismatch after decrypt");
     }
 
     return {
       ok: true,
       elapsedMs: Math.round(performance.now() - started),
-      message: "Argon2id + AES-256-GCM + key wrap passed. Nothing left the browser.",
+      message: "Argon2id + AES-256-GCM + vault key wrap + JSON encrypt passed. Nothing left the browser.",
     };
   } catch (error) {
     return {

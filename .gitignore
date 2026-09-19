@@ -14,6 +14,8 @@ Thumbs.db
 infra/nginx/certs/*.key
 infra/nginx/certs/*.crt
 !infra/nginx/certs/.gitkeep
+infra/nginx/nginx.active.conf
+infra/certbot/
 
 *.pem
 *.p12

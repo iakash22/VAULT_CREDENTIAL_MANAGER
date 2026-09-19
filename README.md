@@ -2,9 +2,14 @@
 
 Self-hosted zero-knowledge secrets manager. Hierarchy: **Workspace → Collections → Secrets**.
 
-Phase 2 adds master-password registration and login. The browser derives an
-encryption key and a separate auth verifier. The API stores only a hash + salt.
-There are still no encrypted secrets in the vault.
+Phase 10 adds Docker deployment (Postgres, API, Web, Nginx, Let's Encrypt). See
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Security hardening:
+[docs/SECURITY-HARDENING.md](docs/SECURITY-HARDENING.md).
+
+```powershell
+npm run db:generate -w @vault/api   # after schema changes
+npm run db:migrate -w @vault/api    # production migrations
+```
 
 ## Requirements
 
@@ -26,6 +31,15 @@ npm run dev
 - Web: http://localhost:5173 (register / login)
 - API health: http://localhost:3001/api/v1/health
 - API ready (Postgres): http://localhost:3001/api/v1/ready
+
+### Docker full stack (optional)
+
+```powershell
+.\infra\scripts\generate-dev-certs.ps1
+docker compose --profile full up -d --build
+```
+
+HTTPS: https://localhost — production steps in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Scripts
 

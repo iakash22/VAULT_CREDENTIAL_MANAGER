@@ -4,6 +4,8 @@ import { useState, type FormEvent } from "react";
 import { useAuth } from "../auth/useAuth";
 import { PasswordField } from "../components/PasswordField";
 import { fetchKdfParams, loginAccount, registerAccount } from "../lib/authApi";
+import { fetchVaultKey, storeVaultKey } from "../lib/vaultApi";
+import { createWrappedVaultKey, unlockVaultKey } from "../lib/vaultCrypto";
 
 type Mode = "login" | "register";
 
@@ -40,11 +42,14 @@ export function AuthPage() {
       if (mode === "register") {
         const keys = await deriveMasterKeySet(password);
         const session = await registerAccount(username, encodeAuthVerifier(keys.authVerifier), keys.kdf);
+        const { vaultKey, wrappedKey } = await createWrappedVaultKey(keys.encryptionKey);
+        await storeVaultKey(session.token, wrappedKey);
         setSession({
           token: session.token,
           expiresAt: Date.now() + session.expiresIn * 1000,
           user: session.user,
           encryptionKey: keys.encryptionKey,
+          vaultKey,
         });
         return;
       }
@@ -52,11 +57,14 @@ export function AuthPage() {
       const { kdf } = await fetchKdfParams(username);
       const keys = await deriveMasterKeySet(password, kdf);
       const session = await loginAccount(username, encodeAuthVerifier(keys.authVerifier));
+      const { wrappedKey } = await fetchVaultKey(session.token);
+      const vaultKey = await unlockVaultKey(keys.encryptionKey, wrappedKey);
       setSession({
         token: session.token,
         expiresAt: Date.now() + session.expiresIn * 1000,
         user: session.user,
         encryptionKey: keys.encryptionKey,
+        vaultKey,
       });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Authentication failed");

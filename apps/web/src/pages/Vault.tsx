@@ -1,31 +1,141 @@
+import type { SecretSummary, WorkspaceTreeResponse } from "@vault/types";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/useAuth";
+import { AddSecretModal, type AddSecretFormValues } from "../components/AddSecretModal";
+import { SecretList } from "../components/SecretList";
+import { GlassCard } from "../components/ui/GlassCard";
+import { PageHeader } from "../components/ui/PageHeader";
+import { fetchWorkspaceTree, fetchWorkspaces } from "../lib/hierarchyApi";
+import { createSecret, listSecrets } from "../lib/secretsApi";
+import { encryptSecretPayload } from "../lib/vaultCrypto";
 
-export function VaultPage() {
+interface VaultPageProps {
+  onOpenSecret: (secretId: string, title: string) => void;
+}
+
+function flattenCollections(
+  nodes: WorkspaceTreeResponse["tree"],
+  prefix = "",
+): Array<{ id: string; label: string }> {
+  const items: Array<{ id: string; label: string }> = [];
+  for (const node of nodes) {
+    const label = prefix ? `${prefix} / ${node.name}` : node.name;
+    items.push({ id: node.id, label });
+    items.push(...flattenCollections(node.children, label));
+  }
+  return items;
+}
+
+export function VaultPage({ onOpenSecret }: VaultPageProps) {
   const { session } = useAuth();
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [secrets, setSecrets] = useState<SecretSummary[]>([]);
+  const [collectionOptions, setCollectionOptions] = useState<Array<{ id: string; label: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!session?.vaultKey) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const { workspaces } = await fetchWorkspaces(session.token);
+      const activeId = workspaceId && workspaces.some((item) => item.id === workspaceId)
+        ? workspaceId
+        : (workspaces[0]?.id ?? null);
+      setWorkspaceId(activeId);
+      if (!activeId) {
+        setSecrets([]);
+        setCollectionOptions([]);
+        return;
+      }
+      const [{ secrets: list }, tree] = await Promise.all([
+        listSecrets(session.token, activeId),
+        fetchWorkspaceTree(session.token, activeId),
+      ]);
+      setSecrets(list);
+      setCollectionOptions(flattenCollections(tree.tree));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Failed to load vault");
+    } finally {
+      setLoading(false);
+    }
+  }, [session, workspaceId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  async function onAddSecret(values: AddSecretFormValues) {
+    if (!session?.vaultKey || !workspaceId) {
+      throw new Error("Vault is not unlocked");
+    }
+    setBusy(true);
+    try {
+      const encryptedPayload = await encryptSecretPayload(session.vaultKey, values.payload);
+      await createSecret(session.token, workspaceId, {
+        title: values.title,
+        tags: values.tags,
+        secretType: values.secretType,
+        collectionId: values.collectionId,
+        encryptedPayload,
+      });
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const vaultReady = Boolean(session?.vaultKey);
 
   return (
     <section className="grid gap-4">
-      <div className="glass-panel rounded-3xl p-6">
-        <p className="text-xs uppercase tracking-[0.2em] text-accent-300">Signed in as {session?.user.username}</p>
-        <h1 className="mt-2 font-display text-3xl font-semibold">Personal vault</h1>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
-          The encryption key is in this tab&apos;s memory only. It was derived here and was not sent
-          to the API. Secret items arrive in Phase 4.
-        </p>
-      </div>
+      <GlassCard delay={1}>
+        <PageHeader
+          eyebrow="Encrypted storage"
+          title="Vault"
+          description="Secrets are encrypted in your browser before upload."
+          action={
+            vaultReady ? (
+              <button
+                type="button"
+                onClick={() => setModalOpen(true)}
+                disabled={!workspaceId || busy}
+                className="btn-primary"
+              >
+                Add secret
+              </button>
+            ) : undefined
+          }
+        />
+        {!vaultReady ? <p className="mt-4 text-sm text-rose-300">Unlock the vault to manage secrets.</p> : null}
+      </GlassCard>
 
-      <div className="glass-panel flex min-h-[280px] flex-col items-center justify-center rounded-3xl px-6 py-12 text-center">
-        <div className="mb-4 grid h-16 w-16 place-items-center rounded-full bg-accent-400/15 text-accent-300">
-          <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="1.7">
-            <path d="M12 3l8 4.5v6.2c0 4.2-3.4 7.8-8 9.3-4.6-1.5-8-5.1-8-9.3V7.5L12 3z" />
-            <path d="M9.5 12.2l1.8 1.8 3.4-3.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+      <GlassCard delay={2}>
+        <h2 className="text-sm font-medium text-slate-200">All secrets</h2>
+        <div className="mt-4">
+          {loading ? (
+            <p className="text-sm text-slate-400">Loading…</p>
+          ) : (
+            <SecretList secrets={secrets} onOpen={(secret) => onOpenSecret(secret.id, secret.title)} />
+          )}
         </div>
-        <h2 className="font-display text-xl">Authenticated</h2>
-        <p className="mt-2 max-w-md text-sm leading-6 text-slate-400">
-          JWT proves who you are. The vault key wrap (Phase 3) is what will open ciphertext.
-        </p>
-      </div>
+      </GlassCard>
+
+      {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+
+      <AddSecretModal
+        open={modalOpen}
+        collectionOptions={collectionOptions}
+        busy={busy}
+        onClose={() => setModalOpen(false)}
+        onSubmit={onAddSecret}
+      />
     </section>
   );
 }

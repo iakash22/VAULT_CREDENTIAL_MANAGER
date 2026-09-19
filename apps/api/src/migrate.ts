@@ -1,7 +1,13 @@
-import type { Pool } from "pg";
+import type { PrismaClient } from "@prisma/client";
 
-export async function migrate(pool: Pool): Promise<void> {
-  await pool.query(`
+/**
+ * Idempotent schema bootstrap for local/dev startup.
+ * Production should prefer `npm run db:migrate` (Prisma migrate deploy).
+ */
+export async function migrate(db: PrismaClient): Promise<void> {
+  await db.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS "pgcrypto";`);
+
+  await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       username TEXT NOT NULL UNIQUE,
@@ -18,4 +24,86 @@ export async function migrate(pool: Pool): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS user_vault_keys (
+      user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      wrapped_key JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS workspaces (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (user_id, name)
+    );
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS collections (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      parent_id UUID REFERENCES collections(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  await db.$executeRawUnsafe(`
+    DO $$ BEGIN
+      CREATE TYPE "SecretType" AS ENUM ('password', 'ssh', 'token', 'env');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS secrets (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      collection_id UUID REFERENCES collections(id) ON DELETE SET NULL,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      secret_type "SecretType" NOT NULL DEFAULT 'password',
+      title TEXT NOT NULL DEFAULT 'Untitled',
+      tags TEXT[] NOT NULL DEFAULT '{}',
+      encrypted_payload JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  await db.$executeRawUnsafe(`
+    ALTER TABLE secrets ADD COLUMN IF NOT EXISTS secret_type "SecretType" NOT NULL DEFAULT 'password';
+  `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE secrets ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT 'Untitled';
+  `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE secrets ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
+  `);
+
+  await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS workspaces_user_id_idx ON workspaces(user_id);`);
+  await db.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS collections_workspace_id_idx ON collections(workspace_id);`,
+  );
+  await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS collections_parent_id_idx ON collections(parent_id);`);
+  await db.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS collections_user_workspace_idx ON collections(user_id, workspace_id);`,
+  );
+  await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS secrets_workspace_id_idx ON secrets(workspace_id);`);
+  await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS secrets_collection_id_idx ON secrets(collection_id);`);
+  await db.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS secrets_user_workspace_idx ON secrets(user_id, workspace_id);`,
+  );
+  await db.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS secrets_user_secret_type_idx ON secrets(user_id, secret_type);`,
+  );
+  await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS secrets_title_idx ON secrets(title);`);
+  await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS secrets_tags_gin_idx ON secrets USING GIN (tags);`);
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 
 export interface AccessTokenClaims {
@@ -10,7 +11,7 @@ export async function signAccessToken(
   secret: string,
   expiresInSec: number,
 ): Promise<string> {
-  return new SignJWT({ username: user.username })
+  return new SignJWT({ username: user.username, jti: randomUUID() })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuedAt()

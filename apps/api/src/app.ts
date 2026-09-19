@@ -1,11 +1,11 @@
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import type { PrismaClient } from "@prisma/client";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
-import type { Pool } from "pg";
 import type { AccessTokenClaims } from "./auth/jwt.js";
 import { loadConfig, type AppConfig } from "./config.js";
-import { createPool } from "./db.js";
+import { checkDatabase, createPrismaClient } from "./db.js";
 import { HttpError } from "./httpError.js";
 import { migrate } from "./migrate.js";
 import { registerV1Routes } from "./routes/v1.js";
@@ -20,12 +20,12 @@ export async function buildApp(overrides?: Partial<AppConfig>): Promise<FastifyI
 
   app.decorate("config", config);
 
-  const pool = config.DATABASE_URL ? createPool(config.DATABASE_URL) : null;
-  app.decorate("db", pool);
-  if (pool) {
-    await migrate(pool);
+  const db = config.DATABASE_URL ? createPrismaClient(config.DATABASE_URL) : null;
+  app.decorate("db", db);
+  if (db) {
+    await migrate(db);
     app.addHook("onClose", async () => {
-      await pool.end();
+      await db.$disconnect();
     });
   }
 
@@ -74,7 +74,7 @@ export async function buildApp(overrides?: Partial<AppConfig>): Promise<FastifyI
 declare module "fastify" {
   interface FastifyInstance {
     config: AppConfig;
-    db: Pool | null;
+    db: PrismaClient | null;
     authenticate: (
       request: import("fastify").FastifyRequest,
       reply: import("fastify").FastifyReply,

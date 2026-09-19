@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { useAuth } from "../auth/useAuth";
+import { GlassCard } from "../components/ui/GlassCard";
+import { PageHeader } from "../components/ui/PageHeader";
 import { fetchHealth, fetchReady } from "../lib/api";
 import { fetchMe } from "../lib/authApi";
 import { runCryptoSelfTest, type SelfTestResult } from "../lib/cryptoSelfTest";
+import { CLIPBOARD_CLEAR_MS, IDLE_LOCK_MINUTES, JWT_REFRESH_BEFORE_SEC } from "../lib/securityConfig";
 
 interface ProbeState {
   loading: boolean;
@@ -52,42 +55,38 @@ export function SettingsPage() {
 
   return (
     <section className="grid gap-4">
-      <div className="glass-panel rounded-3xl p-6">
-        <h1 className="font-display text-3xl font-semibold">Settings</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-300">
-          Session JWT expires in about {remainingMin} minute{remainingMin === 1 ? "" : "s"}. The
-          encryption key stays in RAM and is dropped when you lock.
-        </p>
-      </div>
+      <GlassCard>
+        <PageHeader
+          title="Settings"
+          description={`JWT refreshes ~${JWT_REFRESH_BEFORE_SEC}s before expiry. Idle lock after ${IDLE_LOCK_MINUTES} min. ~${remainingMin} min left on current token.`}
+        />
+      </GlassCard>
 
-      <div className="glass-panel rounded-3xl p-6">
+      <GlassCard>
+        <h2 className="text-lg font-medium">Security</h2>
+        <ul className="mt-3 grid gap-2 text-sm text-slate-300">
+          <li>Rate limiting + login lockout on API</li>
+          <li>Auto-lock on idle and JWT expiry</li>
+          <li>Silent JWT refresh (no re-entering master password)</li>
+          <li>Clipboard clears {Math.round(CLIPBOARD_CLEAR_MS / 1000)}s after copy</li>
+        </ul>
+        <p className="mt-3 text-xs text-slate-500">See docs/SECURITY-HARDENING.md for attack vectors.</p>
+      </GlassCard>
+
+      <GlassCard>
         <h2 className="text-lg font-medium">API connectivity</h2>
-        <p className="mt-1 text-sm text-slate-400">Health, readiness, and the authenticated /me route.</p>
-        <button
-          type="button"
-          onClick={() => void onProbeApi()}
-          disabled={probe.loading}
-          className="mt-4 rounded-2xl bg-accent-500 px-4 py-3 text-sm font-semibold text-ink-950 transition hover:bg-accent-400 disabled:opacity-60"
-        >
+        <button type="button" onClick={() => void onProbeApi()} disabled={probe.loading} className="btn-primary mt-4">
           {probe.loading ? "Checking…" : "Ping API"}
         </button>
         {probe.health ? <p className="mt-3 text-sm text-accent-300">{probe.health}</p> : null}
         {probe.ready ? <p className="text-sm text-slate-300">{probe.ready}</p> : null}
         {probe.me ? <p className="text-sm text-slate-300">{probe.me}</p> : null}
         {probe.error ? <p className="mt-3 text-sm text-rose-300">{probe.error}</p> : null}
-      </div>
+      </GlassCard>
 
-      <div className="glass-panel rounded-3xl p-6">
+      <GlassCard>
         <h2 className="text-lg font-medium">Crypto self-test</h2>
-        <p className="mt-1 text-sm text-slate-400">
-          Client-only Argon2id + AES-256-GCM check. Nothing is written to the database.
-        </p>
-        <button
-          type="button"
-          onClick={() => void onSelfTest()}
-          disabled={testing}
-          className="mt-4 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-semibold transition hover:bg-white/10 disabled:opacity-60"
-        >
+        <button type="button" onClick={() => void onSelfTest()} disabled={testing} className="btn-ghost mt-4">
           {testing ? "Running…" : "Run crypto self-test"}
         </button>
         {selfTest ? (
@@ -95,7 +94,7 @@ export function SettingsPage() {
             {selfTest.ok ? "Passed" : "Failed"} · {selfTest.elapsedMs}ms · {selfTest.message}
           </p>
         ) : null}
-      </div>
+      </GlassCard>
     </section>
   );
 }

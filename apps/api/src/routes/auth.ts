@@ -116,6 +116,18 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
+  app.post("/refresh", { preHandler: app.authenticate, config: { rateLimit: AUTH_RATE_LIMIT } }, async (request) => {
+    if (!request.user) {
+      throw new HttpError(401, "Unauthorized");
+    }
+    const token = await signAccessToken(request.user, app.config.JWT_SECRET, app.config.JWT_EXPIRES_SEC);
+    return {
+      token,
+      expiresIn: app.config.JWT_EXPIRES_SEC,
+      user: request.user,
+    };
+  });
+
   app.get("/me", { preHandler: app.authenticate }, async (request) => {
     if (!request.user) {
       throw new HttpError(401, "Unauthorized");
